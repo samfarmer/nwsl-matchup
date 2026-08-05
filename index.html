@@ -1,0 +1,1216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NWSL Matchups — standings & head-to-head</title>
+<meta name="description" content="Current NWSL standings and a per-team view of every opponent, home and away, with scores.">
+<style>
+  :root{
+    color-scheme: light;
+    --plane:#f9f9f7;
+    --surface:#fcfcfb;
+    --surface-2:#f2f1ee;
+    --line:#e2e1dc;
+    --line-strong:#cbcac3;
+    --ink:#0b0b0b;
+    --ink-2:#52514e;
+    --ink-3:#84837d;
+    --accent:#2a78d6;
+    --good:#0ca30c;
+    --draw:#84837d;
+    --loss:#d03b3b;
+    --good-bg:#e6f4e6;
+    --draw-bg:#ececea;
+    --loss-bg:#fae9e9;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(0,0,0,.05), 0 1px 8px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --plane:#0d0d0d;
+      --surface:#1a1a19;
+      --surface-2:#232322;
+      --line:#333331;
+      --line-strong:#4a4a47;
+      --ink:#ffffff;
+      --ink-2:#c3c2b7;
+      --ink-3:#8f8e86;
+      --accent:#3987e5;
+      --good-bg:#122a12;
+      --draw-bg:#262624;
+      --loss-bg:#331616;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --plane:#0d0d0d;
+    --surface:#1a1a19;
+    --surface-2:#232322;
+    --line:#333331;
+    --line-strong:#4a4a47;
+    --ink:#ffffff;
+    --ink-2:#c3c2b7;
+    --ink-3:#8f8e86;
+    --accent:#3987e5;
+    --good-bg:#122a12;
+    --draw-bg:#262624;
+    --loss-bg:#331616;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 1px 8px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--plane);
+    color:var(--ink);
+    font:15px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 64px}
+
+  /* ---------- header ---------- */
+  header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
+  h1{font-size:20px;font-weight:650;margin:0;letter-spacing:-.01em}
+  h1 span{color:var(--ink-3);font-weight:450}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  select,button{
+    font:inherit;font-size:13px;color:var(--ink);background:var(--surface);
+    border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px;cursor:pointer;
+  }
+  select:hover,button:hover{background:var(--surface-2)}
+  button:active{transform:translateY(1px)}
+  .status{font-size:12.5px;color:var(--ink-3);margin:0 0 18px;display:flex;align-items:center;gap:7px;min-height:18px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none}
+  .dot.stale{background:#fab219}
+  .dot.err{background:var(--loss)}
+  .spin{width:11px;height:11px;border:2px solid var(--line-strong);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;flex:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  /* ---------- layout ---------- */
+  .cols{display:grid;grid-template-columns:minmax(0,var(--standw,420px)) minmax(0,1fr);gap:20px;align-items:start}
+  .cols.rated{--standw:486px}   /* a rating column needs room that team names shouldn't pay for */
+  @media (max-width:900px){ .cols{grid-template-columns:1fr} }
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .card h2{font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+    margin:0;padding:12px 14px;border-bottom:1px solid var(--line)}
+
+  /* ---------- standings ---------- */
+  table{border-collapse:collapse;width:100%}
+  th,td{text-align:right;padding:7px 6px;font-variant-numeric:tabular-nums}
+  th{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);
+     border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--surface);z-index:1}
+  .stand td{border-bottom:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+  .stand tr:last-child td{border-bottom:0}
+  .stand td.rk{text-align:right;color:var(--ink-3);font-size:12px;width:26px;padding-left:12px}
+  .stand td.tm{text-align:left;color:var(--ink);font-weight:500;width:100%}
+  .stand td.pts{color:var(--ink);font-weight:650;padding-right:12px}
+  .stand th.rsr,.stand td.rsr{padding-right:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .stand td.rsr{color:var(--ink-3)}
+  /* Let the team column give up space to the numeric ones instead of overflowing. */
+  .stand td.tm{max-width:0}
+  .stand tbody tr{cursor:pointer}
+  .stand tbody tr:hover{background:var(--surface-2)}
+  .stand tbody tr[aria-pressed="true"]{background:var(--surface-2)}
+  .stand tbody tr[aria-pressed="true"] td.rk{box-shadow:inset 3px 0 0 var(--accent)}
+  .stand tbody tr[aria-pressed="true"] td.tm{color:var(--ink);font-weight:650}
+  .teamcell{display:flex;align-items:center;gap:8px;min-width:0}
+  .crest{width:20px;height:20px;object-fit:contain;flex:none}
+  .tname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .plineoff{border-top:2px solid var(--line-strong) !important}
+  .legend{font-size:11.5px;color:var(--ink-3);padding:9px 14px;border-top:1px solid var(--line);display:flex;gap:6px;align-items:center}
+
+  /* ---------- team panel ---------- */
+  .teamhead{display:flex;align-items:center;gap:13px;padding:16px 16px 14px}
+  .teamhead img{width:44px;height:44px;object-fit:contain;flex:none}
+  .teamhead .nm{font-size:19px;font-weight:650;letter-spacing:-.01em;line-height:1.2}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .tile{background:var(--surface);padding:11px 13px;min-width:0}
+  /* A long rating name must ellipsize, not widen the whole tile row. */
+  .tile .k{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);font-weight:600;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tile .v{font-size:19px;font-weight:650;margin-top:3px;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
+  /* Its own single-column row, so it never orphans into a half-empty one — and the
+     stat row above stays free to collapse its unused tracks. */
+  .tile .v small{font-size:12px;font-weight:500;color:var(--ink-3);margin-left:3px}
+  .tile .sub2{font-size:11.5px;color:var(--ink-3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .form{display:flex;gap:3px;margin-top:6px}
+  .fchip{width:17px;height:17px;border-radius:4px;font-size:10px;font-weight:700;display:grid;place-items:center;color:#fff}
+
+  .tabs{display:flex;gap:6px;padding:12px 14px 0}
+  .tab{font-size:12.5px;padding:5px 11px;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--ink-3);font-weight:550}
+  .tab:hover{background:var(--surface-2);color:var(--ink-2)}
+  .tab[aria-selected="true"]{background:var(--surface-2);border-color:var(--line-strong);color:var(--ink)}
+
+  /* opponent matrix */
+  .mx td,.mx th{padding:0}
+  .mx{width:100%;margin-top:10px;table-layout:fixed}
+  .mx thead th{text-align:center;padding:6px 8px}
+  .mx thead th.opp{text-align:left;padding-left:16px}
+  .mx tbody td{border-bottom:1px solid var(--line);vertical-align:middle}
+  .mx tbody tr:last-child td{border-bottom:0}
+  .mx tbody tr:hover{background:var(--surface-2)}
+  .mx td.opp{padding:6px 8px 6px 16px;text-align:left}
+  .oppbtn{display:flex;align-items:center;gap:8px;background:none;border:0;padding:2px;font-size:13.5px;color:var(--ink);font-weight:500;width:100%;text-align:left;border-radius:6px}
+  .oppbtn:hover{color:var(--accent)}
+  .oppbtn.on{color:var(--accent);font-weight:650}
+  .oppbtn:disabled{color:var(--ink-3);cursor:default}
+  .cell{display:block;padding:6px 8px;text-align:center}
+  .cell.self{color:var(--ink-3);opacity:.45}
+
+  /* comparison columns */
+  .mxscroll{overflow-x:auto}
+  .mx td.opp,.mx th.opp{width:152px}
+  .mx th.gsep,.mx td.gsep{border-left:1px solid var(--line-strong)}
+  .mx thead tr.grp th{padding-bottom:2px;border-bottom:1px solid var(--line)}
+  .grpname{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:650;color:var(--ink);white-space:nowrap}
+  .grprate{display:flex;align-items:baseline;justify-content:center;gap:6px;margin-top:3px;
+           text-transform:none;letter-spacing:0;font-weight:400;flex-wrap:wrap}
+  .rlabbr{font-size:10px;letter-spacing:.05em;color:var(--ink-3);font-weight:600}
+  .rlval{font-size:13px;font-weight:650;color:var(--ink);font-variant-numeric:tabular-nums}
+  .rlrank{font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+  .unpin{background:none;border:0;padding:0 2px;font-size:10px;line-height:1;color:var(--ink-3);border-radius:4px}
+  .unpin:hover{color:var(--loss)}
+
+  /* result chips */
+  .res{display:inline-flex;align-items:center;gap:6px;border-radius:7px;padding:3px 9px;font-size:13px;font-weight:600;
+       font-variant-numeric:tabular-nums;border:1px solid transparent;white-space:nowrap}
+  .res .wl{font-size:10px;font-weight:800;letter-spacing:.02em}
+  .res.W{background:var(--good-bg);color:var(--good);border-color:color-mix(in srgb,var(--good) 26%,transparent)}
+  .res.D{background:var(--draw-bg);color:var(--ink-2);border-color:var(--line-strong)}
+  .res.L{background:var(--loss-bg);color:var(--loss);border-color:color-mix(in srgb,var(--loss) 26%,transparent)}
+  .upc{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .live{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--loss);text-transform:uppercase;letter-spacing:.04em}
+  .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--loss);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.3}}
+
+  /* home / away badge */
+  .ha{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:5px;font-size:10.5px;font-weight:800;flex:none;letter-spacing:0}
+  .ha.H{background:var(--ink);color:var(--surface)}
+  .ha.A{background:transparent;color:var(--ink-2);border:1.5px solid var(--line-strong)}
+  th .ha{margin-right:5px;vertical-align:-4px}
+  .hahdr{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+  .hint{font-size:11px;color:var(--ink-3);font-weight:400;margin-left:5px;text-transform:none;letter-spacing:0}
+  .mx th.opp .hint{display:block;margin:2px 0 0}   /* the column is too narrow to sit inline */
+
+  /* schedule list */
+  .sched{width:100%;margin-top:6px}
+  .sched td{border-bottom:1px solid var(--line);padding:8px 8px;font-size:13px;text-align:left;color:var(--ink-2)}
+  .sched tr:last-child td{border-bottom:0}
+  .sched tr:hover{background:var(--surface-2)}
+  .sched td.dt{width:82px;color:var(--ink-3);font-size:12px;white-space:nowrap;padding-left:16px;font-variant-numeric:tabular-nums}
+  .sched td.hacell{width:30px}
+  .sched td.opp{color:var(--ink);width:100%}
+  .sched td.rescell{text-align:right;white-space:nowrap;padding-right:16px}
+  .vs{color:var(--ink-3);font-size:11.5px;margin-right:5px;display:inline-block;width:16px}
+  .mdsep td{background:var(--surface-2);color:var(--ink-3);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    font-weight:650;padding:5px 16px;border-bottom:1px solid var(--line)}
+  /* ---------- rating explanations ---------- */
+  .docs{margin-top:20px}
+  .rdoc{padding:14px 16px;border-bottom:1px solid var(--line)}
+  .rdoc:last-child{border-bottom:0}
+  .rdoc.on{box-shadow:inset 3px 0 0 var(--accent)}
+  .rdhead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  .rdname{font-size:14.5px;font-weight:650;color:var(--ink)}
+  .rdabbr{font-size:10.5px;font-weight:700;letter-spacing:.05em;color:var(--ink-3);
+          border:1px solid var(--line-strong);border-radius:5px;padding:1px 6px;font-variant-numeric:tabular-nums}
+  .rdon{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent)}
+  .rdoc p{margin:7px 0 0;font-size:13px;line-height:1.55;color:var(--ink-2);max-width:74ch}
+  .rdoc p.lede{color:var(--ink)}
+  .rdnote{padding:12px 16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3);line-height:1.5}
+  .rdnote code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+
+  /* ---------- about ---------- */
+  .abbody{padding:14px 16px}
+  .abbody p{margin:0 0 10px;font-size:13px;line-height:1.6;color:var(--ink-2);max-width:74ch}
+  .abbody p.lede{color:var(--ink)}
+  .abbody p:last-child{margin-bottom:0}
+  .abbody p.ablinks{font-size:11.5px;color:var(--ink-3);margin-top:14px}
+
+  .foot{padding:11px 16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3)}
+  a{color:var(--accent)}
+  .err{padding:16px;color:var(--ink-2);font-size:13px}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>NWSL Matchups <span id="seasonLbl"></span></h1>
+    <div class="controls">
+      <select id="season" aria-label="Season"></select>
+      <select id="rating" aria-label="Remaining-schedule rating"></select>
+      <button id="refresh" title="Fetch the latest results">Refresh</button>
+      <button id="theme" title="Toggle light / dark" aria-label="Toggle theme">◐</button>
+    </div>
+  </header>
+  <p class="status" id="status"></p>
+
+  <div class="cols">
+    <section class="card" aria-labelledby="stH">
+      <h2 id="stH">Standings</h2>
+      <div style="max-height:calc(100vh - 190px);overflow:auto">
+        <table class="stand">
+          <thead><tr>
+            <th class="rk" title="Position">#</th><th style="text-align:left">Team</th>
+            <th title="Played">GP</th><th title="Won">W</th><th title="Drawn">D</th><th title="Lost">L</th>
+            <th title="Goals for">GF</th><th title="Goals against">GA</th><th title="Goal difference">GD</th>
+            <th class="pts" title="Points">PTS</th>
+            <th class="rsr" id="rsrTh" hidden>RSR</th>
+          </tr></thead>
+          <tbody id="standBody"></tbody>
+        </table>
+      </div>
+      <div class="legend"><span style="width:14px;border-top:2px solid var(--line-strong);display:inline-block"></span> playoff cut-off (top 8)</div>
+    </section>
+
+    <section class="card" id="teamPanel" aria-live="polite"></section>
+  </div>
+
+  <section class="card docs" id="ratingDocs" aria-labelledby="rdH">
+    <h2 id="rdH">How the ratings work</h2>
+    <div id="ratingDocsBody"></div>
+  </section>
+
+  <section class="card docs about" aria-labelledby="abH">
+      <h2 id="abH">About</h2>
+      <div class="abbody">
+        <p class="lede">I wanted to see three things; what games a team has left, how a team has performed compared to another team, and a ranking of how hard a teams remaining fixture are. I find it useful to see how a team has done and I hope you do too! &mdash; Sam <a href="https://github.com/samfarmer/">click for contact info</a></p>
+        <p> </p>
+        <p><strong>How it Works:</strong> Pick a team from the standings to see its matchups. Click an opponent and that team's
+          own Home and Away columns appear alongside, so two seasons can be read against the same
+          field rather than by flipping between pages. <strong>How the ratings work</strong> above
+          explains the optional remaining-schedule ratings.</p>
+        <p><strong>Behind the Scenes: </strong> I built this with Claude Code and Opus 5 which is a wonderful combo. Data comes from ESPN's public scoreboard endpoint and refresh on load; a full season
+          is also baked into the file, so it renders instantly and still works with no network.
+          Standings are computed here from the results rather than taken as published — points,
+          then wins, then goal difference, then goals for. It's one HTML file so you can save it to your device and run from there. Ratings are plugins, and contributions of new formulas are welcome —
+          the README has the contract.</p>
+        <p class="ablinks">
+          <a href="https://github.com/samfarmer/nwsl-matchup">Source on GitHub</a> ·
+          MIT licensed · Not affiliated with or endorsed by the NWSL or ESPN.
+          Team crests are the property of their clubs.
+        </p>
+  </section>
+</div>
+
+<!-- Offline baseline. Regenerate with: node scripts/update-snapshot.mjs -->
+<script type="application/json" id="snapshot">{"season":2026,"updated":"2026-08-02T17:21:03.248Z","teams":{"15360":{"id":"15360","name":"Chicago Stars FC","short":"Chicago","abbr":"CHI","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/15360.png"},"15362":{"id":"15362","name":"Portland Thorns FC","short":"Portland","abbr":"POR","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/15362.png"},"15363":{"id":"15363","name":"Seattle Reign FC","short":"Seattle","abbr":"SEA","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/15363.png"},"15364":{"id":"15364","name":"Gotham FC","short":"Gotham","abbr":"GFC","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/15364.png"},"15365":{"id":"15365","name":"Washington Spirit","short":"Washington","abbr":"WAS","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/15365.png"},"15366":{"id":"15366","name":"North Carolina Courage","short":"North Carolina","abbr":"NC","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/15366.png"},"17346":{"id":"17346","name":"Houston Dash","short":"Houston","abbr":"HOU","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/17346.png"},"18206":{"id":"18206","name":"Orlando Pride","short":"Orlando","abbr":"ORL","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/18206.png"},"19141":{"id":"19141","name":"Utah Royals","short":"Utah","abbr":"UTA","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/19141.png"},"20905":{"id":"20905","name":"Racing Louisville FC","short":"Louisville","abbr":"LOU","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/20905.png"},"20907":{"id":"20907","name":"Kansas City Current","short":"Kansas City","abbr":"KC","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/20907.png"},"21422":{"id":"21422","name":"Angel City FC","short":"Angel City","abbr":"LA","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/21422.png"},"21423":{"id":"21423","name":"San Diego Wave FC","short":"San Diego","abbr":"SD","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/21423.png"},"22187":{"id":"22187","name":"Bay FC","short":"Bay","abbr":"BAY","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/22187.png"},"131562":{"id":"131562","name":"Boston Legacy FC","short":"Boston","abbr":"BOS","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/131562.png"},"131563":{"id":"131563","name":"Denver Summit FC","short":"Denver","abbr":"DEN","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/131563.png"}},"matches":[{"id":"401853857","date":"2026-03-14T00:00Z","home":"15365","away":"15362","hs":0,"as":1,"state":"F","venue":"Audi Field"},{"id":"401854039","date":"2026-03-14T16:30Z","home":"131562","away":"15364","hs":0,"as":1,"state":"F","venue":"Gillette Stadium"},{"id":"401853858","date":"2026-03-14T20:00Z","home":"20907","away":"19141","hs":2,"as":1,"state":"F","venue":"CPKC Stadium"},{"id":"401854040","date":"2026-03-14T22:30Z","home":"22187","away":"131563","hs":2,"as":1,"state":"F","venue":"PayPal Park"},{"id":"401853859","date":"2026-03-14T23:00Z","home":"15366","away":"20905","hs":2,"as":1,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853860","date":"2026-03-15T00:45Z","home":"21423","away":"17346","hs":0,"as":1,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853861","date":"2026-03-15T20:00Z","home":"18206","away":"15363","hs":1,"as":2,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853862","date":"2026-03-15T23:00Z","home":"21422","away":"15360","hs":4,"as":0,"state":"F","venue":"BMO Stadium"},{"id":"401854041","date":"2026-03-21T00:00Z","home":"18206","away":"131563","hs":1,"as":1,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853863","date":"2026-03-21T00:00Z","home":"20905","away":"15365","hs":2,"as":2,"state":"F","venue":"Lynn Family Stadium"},{"id":"401853864","date":"2026-03-21T02:00Z","home":"15362","away":"15363","hs":2,"as":0,"state":"F","venue":"Providence Park"},{"id":"401854042","date":"2026-03-21T20:00Z","home":"17346","away":"131562","hs":3,"as":0,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853865","date":"2026-03-21T22:30Z","home":"15364","away":"15366","hs":0,"as":0,"state":"F","venue":"Red Bull Arena"},{"id":"401853866","date":"2026-03-22T00:45Z","home":"22187","away":"21422","hs":1,"as":3,"state":"F","venue":"PayPal Park"},{"id":"401853867","date":"2026-03-22T18:00Z","home":"15360","away":"20907","hs":2,"as":1,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853868","date":"2026-03-22T23:00Z","home":"19141","away":"21423","hs":1,"as":2,"state":"F","venue":"America First Field"},{"id":"401854043","date":"2026-03-25T23:00Z","home":"15364","away":"131563","hs":0,"as":2,"state":"F","venue":"Red Bull Arena"},{"id":"401853869","date":"2026-03-25T23:00Z","home":"15365","away":"19141","hs":1,"as":1,"state":"F","venue":"Audi Field"},{"id":"401853870","date":"2026-03-26T00:00Z","home":"15360","away":"18206","hs":0,"as":3,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853871","date":"2026-03-26T01:00Z","home":"15363","away":"20907","hs":3,"as":0,"state":"F","venue":"ONE Spokane Stadium"},{"id":"401853872","date":"2026-03-26T02:00Z","home":"21423","away":"15362","hs":3,"as":1,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853873","date":"2026-03-28T02:00Z","home":"21422","away":"17346","hs":2,"as":1,"state":"F","venue":"BMO Stadium"},{"id":"401854044","date":"2026-03-28T16:00Z","home":"131562","away":"19141","hs":1,"as":2,"state":"F","venue":"Gillette Stadium"},{"id":"401854045","date":"2026-03-28T18:00Z","home":"131563","away":"15365","hs":0,"as":0,"state":"F","venue":"Empower Field at Mile High"},{"id":"401853874","date":"2026-03-28T20:00Z","home":"15362","away":"20907","hs":2,"as":0,"state":"F","venue":"Providence Park"},{"id":"401853875","date":"2026-03-28T22:30Z","home":"15363","away":"20905","hs":2,"as":1,"state":"F","venue":"ONE Spokane Stadium"},{"id":"401853876","date":"2026-03-28T23:00Z","home":"15366","away":"22187","hs":1,"as":3,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853877","date":"2026-03-29T00:45Z","home":"21423","away":"15360","hs":2,"as":0,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853878","date":"2026-03-29T23:00Z","home":"15364","away":"18206","hs":0,"as":0,"state":"F","venue":"Red Bull Arena"},{"id":"401854046","date":"2026-04-03T23:00Z","home":"131562","away":"21423","hs":0,"as":1,"state":"F","venue":"Gillette Stadium"},{"id":"401853879","date":"2026-04-04T00:00Z","home":"18206","away":"21422","hs":2,"as":1,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853880","date":"2026-04-04T00:30Z","home":"17346","away":"20905","hs":4,"as":3,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853881","date":"2026-04-04T01:00Z","home":"19141","away":"15360","hs":1,"as":0,"state":"F","venue":"America First Field"},{"id":"401853882","date":"2026-04-04T20:00Z","home":"20907","away":"15364","hs":2,"as":1,"state":"F","venue":"CPKC Stadium"},{"id":"401853883","date":"2026-04-04T22:30Z","home":"15366","away":"15362","hs":2,"as":2,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401854047","date":"2026-04-05T00:45Z","home":"15363","away":"131563","hs":0,"as":0,"state":"F","venue":"ONE Spokane Stadium"},{"id":"401853884","date":"2026-04-05T21:00Z","home":"22187","away":"15365","hs":0,"as":2,"state":"F","venue":"PayPal Park"},{"id":"401853885","date":"2026-04-24T21:30Z","home":"20905","away":"18206","hs":3,"as":2,"state":"F","venue":"Lynn Family Stadium"},{"id":"401853886","date":"2026-04-25T00:00Z","home":"15365","away":"20907","hs":4,"as":0,"state":"F","venue":"Audi Field"},{"id":"401853887","date":"2026-04-25T17:00Z","home":"15364","away":"22187","hs":3,"as":0,"state":"F","venue":"Red Bull Arena"},{"id":"401854048","date":"2026-04-25T22:30Z","home":"15360","away":"131562","hs":2,"as":0,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853888","date":"2026-04-26T00:00Z","home":"17346","away":"15366","hs":0,"as":1,"state":"F","venue":"Shell Energy Stadium"},{"id":"401854049","date":"2026-04-26T00:45Z","home":"131563","away":"21423","hs":2,"as":3,"state":"F","venue":"Dick's Sporting Goods Park"},{"id":"401853889","date":"2026-04-26T22:00Z","home":"21422","away":"15362","hs":1,"as":2,"state":"F","venue":"BMO Stadium"},{"id":"401853890","date":"2026-04-27T00:00Z","home":"15363","away":"19141","hs":0,"as":3,"state":"F","venue":"Lumen Field"},{"id":"401854050","date":"2026-04-29T23:00Z","home":"131562","away":"15366","hs":2,"as":2,"state":"F","venue":"Gillette Stadium"},{"id":"401853891","date":"2026-04-29T23:00Z","home":"15365","away":"20905","hs":1,"as":0,"state":"F","venue":"Audi Field"},{"id":"401853892","date":"2026-04-30T00:00Z","home":"15360","away":"15364","hs":0,"as":2,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853893","date":"2026-04-30T02:00Z","home":"15362","away":"21423","hs":2,"as":0,"state":"F","venue":"Providence Park"},{"id":"401853894","date":"2026-05-02T00:00Z","home":"17346","away":"15363","hs":0,"as":0,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853895","date":"2026-05-02T20:00Z","home":"18206","away":"15365","hs":2,"as":4,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853896","date":"2026-05-02T22:30Z","home":"15366","away":"20907","hs":1,"as":2,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853897","date":"2026-05-03T00:45Z","home":"21422","away":"19141","hs":0,"as":1,"state":"F","venue":"BMO Stadium"},{"id":"401853898","date":"2026-05-03T17:00Z","home":"15360","away":"15362","hs":0,"as":2,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401854051","date":"2026-05-03T19:00Z","home":"131562","away":"131563","hs":3,"as":2,"state":"F","venue":"Gillette Stadium"},{"id":"401853899","date":"2026-05-03T21:00Z","home":"15364","away":"20905","hs":1,"as":0,"state":"F","venue":"Red Bull Arena"},{"id":"401853900","date":"2026-05-03T23:00Z","home":"21423","away":"22187","hs":0,"as":1,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853901","date":"2026-05-07T02:00Z","home":"19141","away":"17346","hs":2,"as":0,"state":"F","venue":"America First Field"},{"id":"401853902","date":"2026-05-08T22:30Z","home":"20905","away":"15362","hs":3,"as":1,"state":"F","venue":"Lynn Family Stadium"},{"id":"401853903","date":"2026-05-09T00:00Z","home":"18206","away":"15366","hs":1,"as":0,"state":"F","venue":"Inter&Co Stadium"},{"id":"401854052","date":"2026-05-09T22:30Z","home":"15364","away":"131562","hs":1,"as":1,"state":"F","venue":"Red Bull Arena"},{"id":"401854053","date":"2026-05-10T00:00Z","home":"17346","away":"131563","hs":1,"as":4,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853904","date":"2026-05-10T00:45Z","home":"21422","away":"21423","hs":1,"as":2,"state":"F","venue":"BMO Stadium"},{"id":"401853905","date":"2026-05-10T16:25Z","home":"20907","away":"15360","hs":3,"as":0,"state":"F","venue":"CPKC Stadium"},{"id":"401853906","date":"2026-05-10T20:00Z","home":"22187","away":"19141","hs":0,"as":0,"state":"F","venue":"PayPal Park"},{"id":"401853907","date":"2026-05-10T23:00Z","home":"15363","away":"15365","hs":0,"as":1,"state":"F","venue":"Lumen Field"},{"id":"401854054","date":"2026-05-12T23:00Z","home":"131562","away":"18206","hs":2,"as":1,"state":"F","venue":"Gillette Stadium"},{"id":"401853908","date":"2026-05-16T00:00Z","home":"20907","away":"17346","hs":3,"as":0,"state":"F","venue":"CPKC Stadium"},{"id":"401854055","date":"2026-05-16T02:00Z","home":"22187","away":"131562","hs":1,"as":1,"state":"F","venue":"PayPal Park"},{"id":"401853909","date":"2026-05-16T02:00Z","home":"21423","away":"15365","hs":2,"as":1,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853910","date":"2026-05-16T02:00Z","home":"15363","away":"15364","hs":0,"as":2,"state":"F","venue":"Lumen Field"},{"id":"401853911","date":"2026-05-16T22:30Z","home":"15366","away":"15360","hs":4,"as":0,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401854056","date":"2026-05-17T00:45Z","home":"131563","away":"18206","hs":3,"as":1,"state":"F","venue":"Dick's Sporting Goods Park"},{"id":"401853912","date":"2026-05-17T22:00Z","home":"15362","away":"21422","hs":0,"as":0,"state":"F","venue":"Providence Park"},{"id":"401853913","date":"2026-05-18T00:00Z","home":"19141","away":"20905","hs":2,"as":1,"state":"F","venue":"America First Field"},{"id":"401853914","date":"2026-05-21T00:00Z","home":"17346","away":"21423","hs":2,"as":2,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853916","date":"2026-05-21T02:00Z","home":"21422","away":"20907","hs":2,"as":1,"state":"F","venue":"BMO Stadium"},{"id":"401853915","date":"2026-05-21T02:00Z","home":"15362","away":"22187","hs":2,"as":0,"state":"F","venue":"Providence Park"},{"id":"401854057","date":"2026-05-23T00:00Z","home":"131562","away":"15363","hs":1,"as":2,"state":"F","venue":"Centreville Bank Stadium"},{"id":"401853917","date":"2026-05-23T20:00Z","home":"20905","away":"15366","hs":1,"as":2,"state":"F","venue":"Lynn Family Stadium"},{"id":"401854058","date":"2026-05-23T22:30Z","home":"19141","away":"131563","hs":2,"as":1,"state":"F","venue":"America First Field"},{"id":"401853918","date":"2026-05-24T00:45Z","home":"17346","away":"21422","hs":2,"as":1,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853919","date":"2026-05-24T17:00Z","home":"20907","away":"15362","hs":3,"as":1,"state":"F","venue":"CPKC Stadium"},{"id":"401853920","date":"2026-05-24T21:00Z","home":"22187","away":"15360","hs":0,"as":1,"state":"F","venue":"PayPal Park"},{"id":"401853921","date":"2026-05-24T23:00Z","home":"21423","away":"18206","hs":0,"as":1,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853922","date":"2026-05-29T23:00Z","home":"18206","away":"22187","hs":3,"as":1,"state":"F","venue":"Inter&Co Stadium"},{"id":"401854059","date":"2026-05-30T00:00Z","home":"20905","away":"131563","hs":0,"as":1,"state":"F","venue":"Lynn Family Stadium"},{"id":"401854060","date":"2026-05-30T17:30Z","home":"20907","away":"131562","hs":1,"as":0,"state":"F","venue":"CPKC Stadium"},{"id":"401853923","date":"2026-05-30T20:00Z","home":"15362","away":"19141","hs":2,"as":2,"state":"F","venue":"Providence Park"},{"id":"401853924","date":"2026-05-30T22:30Z","home":"15365","away":"15363","hs":2,"as":1,"state":"F","venue":"Audi Field"},{"id":"401853925","date":"2026-05-31T17:00Z","home":"15360","away":"21423","hs":0,"as":2,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853926","date":"2026-05-31T19:00Z","home":"15364","away":"17346","hs":1,"as":0,"state":"F","venue":"Red Bull Arena"},{"id":"401853927","date":"2026-05-31T23:00Z","home":"21422","away":"15366","hs":1,"as":2,"state":"F","venue":"BMO Stadium"},{"id":"401853928","date":"2026-07-04T00:00Z","home":"15365","away":"17346","hs":2,"as":1,"state":"F","venue":"Audi Field"},{"id":"401854061","date":"2026-07-04T01:30Z","home":"131563","away":"20907","hs":0,"as":3,"state":"F","venue":"Dick's Sporting Goods Park"},{"id":"401853929","date":"2026-07-04T02:00Z","home":"21422","away":"18206","hs":2,"as":0,"state":"F","venue":"BMO Stadium"},{"id":"401853930","date":"2026-07-04T23:30Z","home":"15366","away":"15363","hs":3,"as":1,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853931","date":"2026-07-05T00:45Z","home":"21423","away":"15364","hs":2,"as":0,"state":"F","venue":"Snapdragon Stadium"},{"id":"401854062","date":"2026-07-05T16:00Z","home":"131562","away":"22187","hs":2,"as":2,"state":"F","venue":"Centreville Bank Stadium"},{"id":"401853932","date":"2026-07-05T21:00Z","home":"15360","away":"19141","hs":3,"as":2,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853933","date":"2026-07-05T23:00Z","home":"15362","away":"20905","hs":4,"as":0,"state":"F","venue":"Providence Park"},{"id":"401854063","date":"2026-07-11T00:00Z","home":"131562","away":"15360","hs":2,"as":0,"state":"F","venue":"Centreville Bank Stadium"},{"id":"401853935","date":"2026-07-11T00:00Z","home":"20905","away":"22187","hs":0,"as":2,"state":"F","venue":"Lynn Family Stadium"},{"id":"401853934","date":"2026-07-11T01:03Z","home":"18206","away":"20907","hs":3,"as":0,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853936","date":"2026-07-11T02:00Z","home":"19141","away":"15364","hs":1,"as":3,"state":"F","venue":"America First Field"},{"id":"401853937","date":"2026-07-11T22:30Z","home":"15366","away":"15365","hs":0,"as":2,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853938","date":"2026-07-12T00:45Z","home":"21423","away":"21422","hs":0,"as":2,"state":"F","venue":"Snapdragon Stadium"},{"id":"401853939","date":"2026-07-12T20:00Z","home":"15363","away":"15362","hs":2,"as":0,"state":"F","venue":"Lumen Field"},{"id":"401854064","date":"2026-07-12T23:00Z","home":"131563","away":"17346","hs":2,"as":2,"state":"F","venue":"Dick's Sporting Goods Park"},{"id":"401854065","date":"2026-07-15T23:00Z","home":"18206","away":"131562","hs":0,"as":1,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853940","date":"2026-07-16T00:00Z","home":"15364","away":"15365","hs":1,"as":0,"state":"F","venue":"Citi Field"},{"id":"401853941","date":"2026-07-18T00:00Z","home":"20907","away":"21423","hs":2,"as":2,"state":"F","venue":"CPKC Stadium"},{"id":"401854066","date":"2026-07-18T18:15Z","home":"131563","away":"15362","hs":2,"as":1,"state":"F","venue":"Centennial Stadium"},{"id":"401853942","date":"2026-07-18T18:30Z","home":"15364","away":"15363","hs":3,"as":2,"state":"F","venue":"Icahn Stadium"},{"id":"401853943","date":"2026-07-18T20:00Z","home":"22187","away":"15366","hs":3,"as":0,"state":"F","venue":"PayPal Park"},{"id":"401853944","date":"2026-07-18T22:30Z","home":"15360","away":"21422","hs":0,"as":2,"state":"F","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853946","date":"2026-07-19T00:45Z","home":"19141","away":"18206","hs":1,"as":0,"state":"F","venue":"America First Field"},{"id":"401853945","date":"2026-07-19T01:00Z","home":"20905","away":"17346","hs":1,"as":1,"state":"F","venue":"Lynn Family Stadium"},{"id":"401854067","date":"2026-07-19T23:00Z","home":"131562","away":"15365","hs":1,"as":2,"state":"F","venue":"Centreville Bank Stadium"},{"id":"401853948","date":"2026-07-25T00:00Z","home":"17346","away":"22187","hs":1,"as":0,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853947","date":"2026-07-25T00:00Z","home":"18206","away":"15360","hs":1,"as":0,"state":"F","venue":"Inter&Co Stadium"},{"id":"401853949","date":"2026-07-25T02:00Z","home":"15362","away":"15364","hs":2,"as":2,"state":"F","venue":"Providence Park"},{"id":"401854068","date":"2026-07-25T21:00Z","home":"131562","away":"20907","hs":1,"as":0,"state":"F","venue":"Centreville Bank Stadium"},{"id":"401853950","date":"2026-07-25T23:45Z","home":"15366","away":"19141","hs":1,"as":4,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853951","date":"2026-07-26T21:00Z","home":"21423","away":"15363","hs":0,"as":2,"state":"F","venue":"Snapdragon Stadium"},{"id":"401854069","date":"2026-07-26T23:00Z","home":"15365","away":"131563","hs":1,"as":0,"state":"F","venue":"Audi Field"},{"id":"401853952","date":"2026-07-27T01:00Z","home":"21422","away":"20905","hs":1,"as":2,"state":"F","venue":"BMO Stadium"},{"id":"401853953","date":"2026-07-30T00:00Z","home":"20907","away":"20905","hs":5,"as":1,"state":"F","venue":"CPKC Stadium"},{"id":"401853954","date":"2026-07-30T01:00Z","home":"19141","away":"15365","hs":0,"as":1,"state":"F","venue":"America First Field"},{"id":"401853955","date":"2026-07-30T02:00Z","home":"22187","away":"15364","hs":0,"as":1,"state":"F","venue":"PayPal Park"},{"id":"401853956","date":"2026-08-01T00:00Z","home":"15366","away":"18206","hs":5,"as":0,"state":"F","venue":"WakeMed Soccer Park"},{"id":"401853957","date":"2026-08-01T20:00Z","home":"20905","away":"15360","hs":2,"as":1,"state":"F","venue":"Lynn Family Stadium"},{"id":"401853958","date":"2026-08-01T22:30Z","home":"20907","away":"21422","hs":1,"as":1,"state":"F","venue":"CPKC Stadium"},{"id":"401853959","date":"2026-08-02T00:00Z","home":"17346","away":"15364","hs":0,"as":1,"state":"F","venue":"Shell Energy Stadium"},{"id":"401853960","date":"2026-08-02T00:45Z","home":"22187","away":"15363","hs":2,"as":3,"state":"F","venue":"PayPal Park"},{"id":"401853961","date":"2026-08-02T20:00Z","home":"15365","away":"21423","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401853962","date":"2026-08-02T23:00Z","home":"19141","away":"15362","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401854070","date":"2026-08-03T01:00Z","home":"131563","away":"131562","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401854071","date":"2026-08-06T02:00Z","home":"131563","away":"15366","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401853965","date":"2026-08-07T23:00Z","home":"18206","away":"20905","hs":null,"as":null,"state":"S","venue":"Inter&Co Stadium"},{"id":"401853963","date":"2026-08-08T00:00Z","home":"15364","away":"21423","hs":null,"as":null,"state":"S","venue":"Red Bull Arena"},{"id":"401854072","date":"2026-08-08T20:00Z","home":"131563","away":"19141","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401853964","date":"2026-08-08T22:30Z","home":"15365","away":"15366","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401853966","date":"2026-08-09T00:45Z","home":"17346","away":"20907","hs":null,"as":null,"state":"S","venue":"Shell Energy Stadium"},{"id":"401854073","date":"2026-08-09T20:00Z","home":"131562","away":"15362","hs":null,"as":null,"state":"S","venue":"Centreville Bank Stadium"},{"id":"401853967","date":"2026-08-09T23:00Z","home":"15360","away":"22187","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853968","date":"2026-08-10T01:00Z","home":"15363","away":"21422","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401853969","date":"2026-08-15T00:00Z","home":"15364","away":"20907","hs":null,"as":null,"state":"S","venue":"Red Bull Arena"},{"id":"401854074","date":"2026-08-15T02:00Z","home":"21423","away":"131563","hs":null,"as":null,"state":"S","venue":"Snapdragon Stadium"},{"id":"401853970","date":"2026-08-15T02:00Z","home":"15363","away":"15360","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401853971","date":"2026-08-15T02:00Z","home":"19141","away":"22187","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401854075","date":"2026-08-15T22:30Z","home":"20905","away":"131562","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401853972","date":"2026-08-16T00:45Z","home":"15362","away":"18206","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401853973","date":"2026-08-16T23:00Z","home":"15366","away":"17346","hs":null,"as":null,"state":"S","venue":"WakeMed Soccer Park"},{"id":"401853974","date":"2026-08-17T01:00Z","home":"21422","away":"15365","hs":null,"as":null,"state":"S","venue":"BMO Stadium"},{"id":"401853975","date":"2026-08-19T22:30Z","home":"20905","away":"15363","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401853976","date":"2026-08-20T00:00Z","home":"17346","away":"15360","hs":null,"as":null,"state":"S","venue":"Shell Energy Stadium"},{"id":"401853977","date":"2026-08-22T02:00Z","home":"21423","away":"19141","hs":null,"as":null,"state":"S","venue":"Snapdragon Stadium"},{"id":"401853978","date":"2026-08-22T22:30Z","home":"20907","away":"15363","hs":null,"as":null,"state":"S","venue":"CPKC Stadium"},{"id":"401854076","date":"2026-08-22T23:30Z","home":"15366","away":"131562","hs":null,"as":null,"state":"S","venue":"WakeMed Soccer Park"},{"id":"401854077","date":"2026-08-23T00:45Z","home":"15362","away":"131563","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401853979","date":"2026-08-23T18:00Z","home":"15360","away":"20905","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853980","date":"2026-08-23T20:00Z","home":"15365","away":"18206","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401853981","date":"2026-08-23T22:00Z","home":"22187","away":"17346","hs":null,"as":null,"state":"S","venue":"PayPal Park"},{"id":"401853982","date":"2026-08-24T00:00Z","home":"21422","away":"15364","hs":null,"as":null,"state":"S","venue":"BMO Stadium"},{"id":"401853983","date":"2026-08-27T00:00Z","home":"15366","away":"21422","hs":null,"as":null,"state":"S","venue":"WakeMed Soccer Park"},{"id":"401853984","date":"2026-08-29T00:00Z","home":"15364","away":"15362","hs":null,"as":null,"state":"S","venue":"Red Bull Arena"},{"id":"401853985","date":"2026-08-29T02:00Z","home":"21423","away":"20905","hs":null,"as":null,"state":"S","venue":"Snapdragon Stadium"},{"id":"401853986","date":"2026-08-29T22:30Z","home":"20907","away":"15366","hs":null,"as":null,"state":"S","venue":"CPKC Stadium"},{"id":"401853987","date":"2026-08-29T23:00Z","home":"18206","away":"19141","hs":null,"as":null,"state":"S","venue":"Inter&Co Stadium"},{"id":"401854078","date":"2026-08-30T00:45Z","home":"131563","away":"15360","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401853988","date":"2026-08-30T16:30Z","home":"15365","away":"22187","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401853989","date":"2026-08-30T23:00Z","home":"15363","away":"17346","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401854079","date":"2026-09-01T00:00Z","home":"131562","away":"21422","hs":null,"as":null,"state":"S","venue":"Gillette Stadium"},{"id":"401854080","date":"2026-09-05T01:30Z","home":"19141","away":"131562","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401853990","date":"2026-09-05T02:00Z","home":"22187","away":"20907","hs":null,"as":null,"state":"S","venue":"PayPal Park"},{"id":"401853991","date":"2026-09-05T22:30Z","home":"20905","away":"21422","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401854081","date":"2026-09-06T18:00Z","home":"131563","away":"15364","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401853992","date":"2026-09-06T20:00Z","home":"15360","away":"15366","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401853993","date":"2026-09-06T20:00Z","home":"15362","away":"15365","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401853994","date":"2026-09-06T23:00Z","home":"18206","away":"17346","hs":null,"as":null,"state":"S","venue":"Inter&Co Stadium"},{"id":"401853995","date":"2026-09-07T01:00Z","home":"15363","away":"21423","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401853996","date":"2026-09-11T22:30Z","home":"20905","away":"15364","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401853997","date":"2026-09-12T00:00Z","home":"20907","away":"18206","hs":null,"as":null,"state":"S","venue":"CPKC Stadium"},{"id":"401854082","date":"2026-09-12T02:00Z","home":"21422","away":"131563","hs":null,"as":null,"state":"S","venue":"BMO Stadium"},{"id":"401853999","date":"2026-09-12T22:30Z","home":"21423","away":"15366","hs":null,"as":null,"state":"S","venue":"Snapdragon Stadium"},{"id":"401853998","date":"2026-09-13T00:00Z","home":"15363","away":"22187","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401854000","date":"2026-09-13T00:45Z","home":"17346","away":"19141","hs":null,"as":null,"state":"S","venue":"Shell Energy Stadium"},{"id":"401854083","date":"2026-09-13T17:00Z","home":"15365","away":"131562","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401854001","date":"2026-09-13T23:00Z","home":"15362","away":"15360","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401854084","date":"2026-09-17T01:30Z","home":"131563","away":"22187","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401854002","date":"2026-09-17T02:00Z","home":"21422","away":"15363","hs":null,"as":null,"state":"S","venue":"BMO Stadium"},{"id":"401854003","date":"2026-09-19T02:00Z","home":"21423","away":"20907","hs":null,"as":null,"state":"S","venue":"Snapdragon Stadium"},{"id":"401854004","date":"2026-09-19T20:00Z","home":"18206","away":"15362","hs":null,"as":null,"state":"S","venue":"Inter&Co Stadium"},{"id":"401854005","date":"2026-09-19T22:30Z","home":"15366","away":"15364","hs":null,"as":null,"state":"S","venue":"WakeMed Soccer Park"},{"id":"401854085","date":"2026-09-20T00:45Z","home":"131563","away":"15363","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401854086","date":"2026-09-20T18:00Z","home":"131562","away":"17346","hs":null,"as":null,"state":"S","venue":"Centreville Bank Stadium"},{"id":"401854006","date":"2026-09-20T21:00Z","home":"15360","away":"15365","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401854007","date":"2026-09-20T23:00Z","home":"22187","away":"20905","hs":null,"as":null,"state":"S","venue":"PayPal Park"},{"id":"401854008","date":"2026-09-20T23:00Z","home":"19141","away":"21422","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401854009","date":"2026-09-25T22:30Z","home":"20905","away":"21423","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401854010","date":"2026-09-26T00:00Z","home":"15364","away":"15360","hs":null,"as":null,"state":"S","venue":"Red Bull Arena"},{"id":"401854087","date":"2026-09-26T00:30Z","home":"15363","away":"131562","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401854088","date":"2026-09-26T16:30Z","home":"20907","away":"131563","hs":null,"as":null,"state":"S","venue":"CPKC Stadium"},{"id":"401854011","date":"2026-09-26T22:30Z","home":"15365","away":"21422","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401854012","date":"2026-09-27T00:45Z","home":"15362","away":"17346","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401854013","date":"2026-09-27T21:00Z","home":"22187","away":"18206","hs":null,"as":null,"state":"S","venue":"PayPal Park"},{"id":"401854014","date":"2026-09-27T23:00Z","home":"19141","away":"15366","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401854015","date":"2026-10-03T00:00Z","home":"18206","away":"21423","hs":null,"as":null,"state":"S","venue":"Inter&Co Stadium"},{"id":"401854016","date":"2026-10-03T02:00Z","home":"15363","away":"15366","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401854017","date":"2026-10-03T20:00Z","home":"20905","away":"19141","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401854018","date":"2026-10-03T22:30Z","home":"20907","away":"22187","hs":null,"as":null,"state":"S","venue":"CPKC Stadium"},{"id":"401854089","date":"2026-10-04T00:45Z","home":"15362","away":"131562","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401854019","date":"2026-10-04T16:00Z","home":"15364","away":"21422","hs":null,"as":null,"state":"S","venue":"Red Bull Arena"},{"id":"401854090","date":"2026-10-04T20:00Z","home":"15360","away":"131563","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401854020","date":"2026-10-04T23:00Z","home":"17346","away":"15365","hs":null,"as":null,"state":"S","venue":"Shell Energy Stadium"},{"id":"401854091","date":"2026-10-17T00:00Z","home":"131562","away":"20905","hs":null,"as":null,"state":"S","venue":"Gillette Stadium"},{"id":"401854021","date":"2026-10-17T16:30Z","home":"15365","away":"15364","hs":null,"as":null,"state":"S","venue":"Audi Field"},{"id":"401854022","date":"2026-10-17T22:30Z","home":"19141","away":"20907","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401854023","date":"2026-10-17T23:00Z","home":"15366","away":"21423","hs":null,"as":null,"state":"S","venue":"WakeMed Soccer Park"},{"id":"401854092","date":"2026-10-18T00:45Z","home":"131563","away":"21422","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401854024","date":"2026-10-18T17:00Z","home":"17346","away":"18206","hs":null,"as":null,"state":"S","venue":"Shell Energy Stadium"},{"id":"401854025","date":"2026-10-18T21:00Z","home":"22187","away":"15362","hs":null,"as":null,"state":"S","venue":"PayPal Park"},{"id":"401854026","date":"2026-10-18T23:00Z","home":"15360","away":"15363","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401854027","date":"2026-10-24T00:00Z","home":"15360","away":"17346","hs":null,"as":null,"state":"S","venue":"Northwestern Medicine Field at Martin Stadium"},{"id":"401854028","date":"2026-10-24T01:30Z","home":"19141","away":"15363","hs":null,"as":null,"state":"S","venue":"America First Field"},{"id":"401854029","date":"2026-10-24T02:00Z","home":"15362","away":"15366","hs":null,"as":null,"state":"S","venue":"Providence Park"},{"id":"401854093","date":"2026-10-24T22:30Z","home":"131563","away":"20905","hs":null,"as":null,"state":"S","venue":"Centennial Stadium"},{"id":"401854030","date":"2026-10-25T00:45Z","home":"21422","away":"22187","hs":null,"as":null,"state":"S","venue":"BMO Stadium"},{"id":"401854031","date":"2026-10-25T19:00Z","home":"18206","away":"15364","hs":null,"as":null,"state":"S","venue":"Inter&Co Stadium"},{"id":"401854032","date":"2026-10-25T21:00Z","home":"20907","away":"15365","hs":null,"as":null,"state":"S","venue":"CPKC Stadium"},{"id":"401854094","date":"2026-10-25T23:00Z","home":"21423","away":"131562","hs":null,"as":null,"state":"S","venue":"Snapdragon Stadium"},{"id":"401854095","date":"2026-11-01T22:00Z","home":"21422","away":"131562","hs":null,"as":null,"state":"S"},{"id":"401854033","date":"2026-11-01T22:00Z","home":"22187","away":"21423","hs":null,"as":null,"state":"S","venue":"PayPal Park"},{"id":"401854034","date":"2026-11-01T22:00Z","home":"15364","away":"19141","hs":null,"as":null,"state":"S","venue":"Red Bull Arena"},{"id":"401854038","date":"2026-11-01T22:00Z","home":"17346","away":"15362","hs":null,"as":null,"state":"S","venue":"Shell Energy Stadium"},{"id":"401854096","date":"2026-11-01T22:00Z","home":"15366","away":"131563","hs":null,"as":null,"state":"S","venue":"WakeMed Soccer Park"},{"id":"401854036","date":"2026-11-01T22:00Z","home":"20905","away":"20907","hs":null,"as":null,"state":"S","venue":"Lynn Family Stadium"},{"id":"401854037","date":"2026-11-01T22:00Z","home":"15363","away":"18206","hs":null,"as":null,"state":"S","venue":"Lumen Field"},{"id":"401854035","date":"2026-11-01T22:00Z","home":"15365","away":"15360","hs":null,"as":null,"state":"S","venue":"Audi Field"}]}</script>
+
+<script>
+(() => {
+"use strict";
+
+const LEAGUE = "usa.nwsl";
+const API = s =>
+  `https://site.api.espn.com/apis/site/v2/sports/soccer/${LEAGUE}/scoreboard?limit=1000&dates=${s}0101-${s}1231`;
+const CACHE_KEY = s => `nwsl-matchup:${s}`;
+const CACHE_TTL = 10 * 60 * 1000;          // re-fetch in the background after 10 min
+const PLAYOFF_SPOTS = 8;
+
+const $ = id => document.getElementById(id);
+const el = (t, cls, txt) => { const n = document.createElement(t); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
+
+/* ---------------- state ---------------- */
+const nowYear = new Date().getUTCFullYear();
+const SEASONS = [];
+for (let y = nowYear; y >= 2023; y--) SEASONS.push(y);
+
+let season  = null;   // number
+let data    = null;   // {season, updated, teams, matches, source}
+let selected = null;  // team id
+let compare = [];     // team ids shown beside the selected team in the opponent matrix
+let view    = "opponents";
+let ratingId = null;  // id of the active remaining-schedule rating, or null for off
+let booted  = false;  // ratings registered before this point are picked up by init()
+
+/* ---------------- parsing ---------------- */
+// Trim an ESPN scoreboard payload down to what the page actually renders.
+function parseESPN(json, year) {
+  const teams = {}, matches = [];
+  for (const ev of json.events || []) {
+    const c = (ev.competitions || [])[0];
+    if (!c || !c.competitors || c.competitors.length < 2) continue;
+    if (ev.season && ev.season.slug && ev.season.slug !== "regular-season") continue;
+
+    const home = c.competitors.find(x => x.homeAway === "home");
+    const away = c.competitors.find(x => x.homeAway === "away");
+    if (!home || !away) continue;
+
+    for (const side of [home, away]) {
+      const t = side.team;
+      if (!teams[t.id]) teams[t.id] = {
+        id: t.id,
+        name: t.displayName,
+        short: t.shortDisplayName || t.displayName,
+        abbr: t.abbreviation || (t.displayName || "").slice(0, 3).toUpperCase(),
+        logo: (t.logos && t.logos[0] && t.logos[0].href) || t.logo ||
+              `https://a.espncdn.com/i/teamlogos/soccer/500/${t.id}.png`
+      };
+    }
+    const st = (c.status && c.status.type) || {};
+    const state = st.completed ? "F" : st.state === "in" ? "L" : "S";
+    const num = v => (v === undefined || v === null || v === "") ? null : Number(v);
+
+    matches.push({
+      id: ev.id,
+      date: ev.date,
+      home: home.team.id,
+      away: away.team.id,
+      hs: state === "S" ? null : num(home.score),
+      as: state === "S" ? null : num(away.score),
+      state,
+      clock: state === "L" ? (st.shortDetail || st.detail || "Live") : undefined,
+      venue: (c.venue && c.venue.fullName) || undefined
+    });
+  }
+  matches.sort((a, b) => a.date.localeCompare(b.date));
+  return { season: year, updated: new Date().toISOString(), teams, matches };
+}
+
+/* ---------------- table maths ---------------- */
+// Points, then wins, then goal difference, then goals for — NWSL's published
+// order also uses head-to-head; this matched ESPN's table exactly at build time.
+function computeTable(d) {
+  const blank = id => ({
+    id, gp:0, w:0, dr:0, l:0, gf:0, ga:0, pts:0,
+    hw:0, hd:0, hl:0, aw:0, ad:0, al:0, form:[]
+  });
+  const rows = {};
+  for (const id of Object.keys(d.teams)) rows[id] = blank(id);
+
+  for (const m of d.matches) {
+    if (m.state !== "F" || m.hs == null || m.as == null) continue;
+    const H = rows[m.home], A = rows[m.away];
+    if (!H || !A) continue;
+    for (const [r, gf, ga, isHome] of [[H, m.hs, m.as, true], [A, m.as, m.hs, false]]) {
+      r.gp++; r.gf += gf; r.ga += ga;
+      const res = gf > ga ? "W" : gf < ga ? "L" : "D";
+      if (res === "W") { r.w++;  r.pts += 3; isHome ? r.hw++ : r.aw++; }
+      else if (res === "D") { r.dr++; r.pts += 1; isHome ? r.hd++ : r.ad++; }
+      else { r.l++; isHome ? r.hl++ : r.al++; }
+      r.form.push(res);
+    }
+  }
+  const out = Object.values(rows);
+  for (const r of out) { r.gd = r.gf - r.ga; r.form = r.form.slice(-5); }
+  out.sort((a, b) =>
+    b.pts - a.pts || b.w - a.w || b.gd - a.gd || b.gf - a.gf ||
+    d.teams[a.id].name.localeCompare(d.teams[b.id].name));
+  out.forEach((r, i) => r.rank = i + 1);
+  return out;
+}
+
+/* ---------------- remaining-schedule ratings ---------------- */
+/* A rating scores the matches a team has *left to play*. Formulas are plugins:
+   the optional prepare(data, table) builds any league-wide state a formula needs
+   (an Elo table, an SRS solve…), then compute(ctx, state) returns one number per
+   team — or null for "no opinion". The app owns ranking and formatting, so every
+   rating, built-in or third-party, reads the same way and can be compared.
+
+   Register your own any time before the first render:
+
+     NWSLRating.register({
+       id: "my-rating",              // stable; appears in the URL as #rating=my-rating
+       name: "My rating",            // shown in the picker and as the column header
+       blurb: "What it measures.",   // tooltip
+       abbr: "MINE",                 // standings column header; falls back to name
+       harderIsHigher: true,         // orientation, for ranking "hardest" first
+       format: v => v.toFixed(2),
+       explain: ["Paragraph.", "Another."],      // optional; see renderRatingDocs
+       prepare: (data, table) => state,          // optional
+       compute: ({ teamId, row, table, data, remaining }, state) => number | null
+     });
+
+   ctx.remaining is the team's unplayed matches, already seen from that team's
+   side, so each entry has .oppId and .isHome. Formulas must not mutate data,
+   table or state — everything handed over is shared with the rest of the page. */
+const RATINGS = [];
+function registerRating(def) {
+  if (!def || !def.id || typeof def.compute !== "function") {
+    console.warn("NWSLRating.register: need at least { id, compute }", def);
+    return null;
+  }
+  const at = RATINGS.findIndex(r => r.id === def.id);
+  if (at >= 0) RATINGS[at] = def; else RATINGS.push(def);
+  ratingsChanged();          // no-op until the page has booted
+  return def;
+}
+
+/* Unplayed matches for a team, from that team's point of view. */
+function remainingFor(d, teamId) {
+  return d.matches
+    .filter(m => m.state === "S" && (m.home === teamId || m.away === teamId))
+    .map(m => perspective(m, teamId));
+}
+
+const pointsPerGame = row => row.gp ? row.pts / row.gp : null;
+
+/* PPG at one venue only — thin samples fall back to the overall rate. */
+function venuePointsPerGame(row, atHome) {
+  const [w, d, l] = atHome ? [row.hw, row.hd, row.hl] : [row.aw, row.ad, row.al];
+  const gp = w + d + l;
+  return gp ? (w * 3 + d) / gp : pointsPerGame(row);
+}
+
+/* Run one rating over the whole league. A formula that throws is contained:
+   the page keeps working and that team (or that rating) just shows "—". */
+function computeRatings(d, table, def) {
+  const out = new Map();
+  if (!def) return out;
+
+  let state = null;
+  if (def.prepare) {
+    try { state = def.prepare(d, table); }
+    catch (e) { console.warn(`rating "${def.id}": prepare() failed`, e); return out; }
+  }
+
+  const raw = new Map();
+  for (const row of table) {
+    let v = null;
+    try {
+      v = def.compute({ teamId: row.id, row, table, data: d, remaining: remainingFor(d, row.id) }, state);
+    } catch (e) {
+      console.warn(`rating "${def.id}": compute() failed for ${row.id}`, e);
+    }
+    raw.set(row.id, Number.isFinite(v) ? v : null);
+  }
+
+  // Rank hardest-first, ties sharing a place. Teams with no value are unranked.
+  const scored = [...raw].filter(([, v]) => v !== null);
+  const sign = def.harderIsHigher === false ? -1 : 1;
+  scored.sort((a, b) => sign * (b[1] - a[1]));
+  scored.forEach(([id, v], i) => {
+    const prev = i && scored[i - 1];
+    out.set(id, { value: v, rank: prev && prev[1] === v ? out.get(prev[0]).rank : i + 1, of: scored.length });
+  });
+  for (const [id, v] of raw) if (v === null) out.set(id, { value: null, rank: null, of: scored.length });
+  return out;
+}
+
+const fmtRating = (def, r) =>
+  (!def || !r || r.value === null) ? "—"
+    : (def.format ? def.format(r.value) : r.value.toFixed(2));
+
+registerRating({
+  id: "opp-ppg",
+  name: "Opponent PPG",
+  abbr: "OPPG",
+  blurb: "Average points-per-game of the opponents still to play. Higher = harder.",
+  harderIsHigher: true,
+  format: v => v.toFixed(2),
+  explain: [
+    "Take every match a team has left, look up each opponent's points-per-game so far, " +
+    "and average them. A team facing nothing but leaders scores near 3.00; one facing " +
+    "nothing but the bottom of the table scores near 0.00. In practice almost everyone " +
+    "lands between 1.20 and 1.60, because a balanced double round-robin means each team " +
+    "plays every other team twice — the spread comes entirely from which of those matches " +
+    "happen to be left.",
+    "Points-per-game rather than raw points, because teams have played different numbers " +
+    "of matches at any given moment and raw points would flatter opponents who have simply " +
+    "played more. An opponent with no matches played yet falls back to the league average.",
+    "It ignores where the match is played, and it ignores the fact that a team's early-season " +
+    "form may not be its current form. It also can't know that you already beat a given " +
+    "opponent 4–0 in the first leg."
+  ],
+  prepare: (d, table) => {
+    const ppg = new Map(table.map(r => [r.id, pointsPerGame(r)]));
+    const played = [...ppg.values()].filter(v => v !== null);
+    const avg = played.length ? played.reduce((a, b) => a + b, 0) / played.length : 0;
+    return { ppg, avg };
+  },
+  compute: ({ remaining }, s) => {
+    if (!remaining.length) return null;
+    const total = remaining.reduce((a, p) => a + (s.ppg.get(p.oppId) ?? s.avg), 0);
+    return total / remaining.length;
+  }
+});
+
+registerRating({
+  id: "opp-venue-ppg",
+  name: "Opponent PPG (venue)",
+  abbr: "OPPG·V",
+  blurb: "Same as Opponent PPG, but each opponent is judged on the form it shows " +
+         "where the match is played — its home record when you visit, its away record when it visits.",
+  harderIsHigher: true,
+  format: v => v.toFixed(2),
+  explain: [
+    "Opponent PPG gives each opponent a single number for the whole season. This version asks a " +
+    "narrower question: how good is that opponent in the situation you are about to meet them in? " +
+    "Plenty of teams are close to unbeatable at home and ordinary on the road, and a schedule made " +
+    "of trips to those teams is harder than the same schedule made of home dates against them.",
+    "An example. Suppose an opponent has taken 2.20 points per game at home and 0.80 away — a big " +
+    "split — which averages out to 1.50 across the season. Opponent PPG scores both of your matches " +
+    "against them at that 1.50. This rating splits them: your trip to their ground counts 2.20, " +
+    "because that is the side of them you will face, while hosting them counts 0.80. If the trip is " +
+    "still to come and the home date is already played, your remaining schedule looks meaningfully " +
+    "harder here than it does under the plain version — and if it is the other way round, easier.",
+    "Note the inversion: it is your opponent's record at the relevant venue, not yours. When you " +
+    "are at home, the opponent is away, so their away record is what counts.",
+    "The cost is sample size. A venue record is only about half a team's matches, so these numbers " +
+    "are noisy early in a season — one thrashing on the road moves an away record a long way. A team " +
+    "with no matches yet at the relevant venue falls back to its overall points-per-game, and to the " +
+    "league average if it has not played at all.",
+    "Like the plain version, it treats current form as a fixed property of the opponent and knows " +
+    "nothing about injuries, congestion, or who you have already played."
+  ],
+  prepare: (d, table) => {
+    const rows = new Map(table.map(r => [r.id, r]));
+    const played = table.map(pointsPerGame).filter(v => v !== null);
+    return { rows, avg: played.length ? played.reduce((a, b) => a + b, 0) / played.length : 0 };
+  },
+  compute: ({ remaining }, s) => {
+    if (!remaining.length) return null;
+    const total = remaining.reduce((a, p) => {
+      const opp = s.rows.get(p.oppId);
+      // p.isHome is *our* venue, so the opponent is playing the other side of it.
+      return a + (opp ? (venuePointsPerGame(opp, !p.isHome) ?? s.avg) : s.avg);
+    }, 0);
+    return total / remaining.length;
+  }
+});
+
+/* ---------------- formatting ---------------- */
+const fmtDay   = iso => new Date(iso).toLocaleDateString(undefined, { month:"short", day:"numeric" });
+const fmtMonth = iso => new Date(iso).toLocaleDateString(undefined, { month:"long", year:"numeric" });
+const fmtTime  = iso => new Date(iso).toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" });
+
+const ord = n => n + (["th","st","nd","rd"][((n % 100) - 20) % 10] || ["th","st","nd","rd"][n % 100] || "th");
+
+function relTime(iso) {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} hr ago`;
+  return `${Math.round(s / 86400)} d ago`;
+}
+
+function crest(t, size) {
+  const i = el("img", "crest");
+  i.src = t.logo; i.alt = ""; i.loading = "lazy";
+  if (size) { i.style.width = i.style.height = size + "px"; }
+  i.onerror = () => { i.style.visibility = "hidden"; };
+  return i;
+}
+
+/* Result chip: colour + a W/D/L letter, so it never reads by colour alone. */
+function resultChip(res, score) {
+  const n = el("span", "res " + res);
+  n.append(el("span", "wl", res), document.createTextNode(score));
+  n.title = { W:"Win", D:"Draw", L:"Loss" }[res];
+  return n;
+}
+
+function haBadge(isHome) {
+  const b = el("span", "ha " + (isHome ? "H" : "A"), isHome ? "H" : "A");
+  b.title = isHome ? "Home" : "Away";
+  return b;
+}
+
+/* One match from the selected team's point of view. */
+function perspective(m, teamId) {
+  const isHome = m.home === teamId;
+  const oppId  = isHome ? m.away : m.home;
+  const gf = isHome ? m.hs : m.as;
+  const ga = isHome ? m.as : m.hs;
+  const played = m.state !== "S" && gf != null && ga != null;
+  return {
+    m, isHome, oppId, gf, ga, played,
+    res: played ? (gf > ga ? "W" : gf < ga ? "L" : "D") : null,
+    score: played ? `${gf}–${ga}` : null
+  };
+}
+
+/* ---------------- rendering: rating explanations ---------------- */
+/* A rating's `explain` may be a string, an array of paragraphs, or a function
+   returning either — a function lets a formula describe its own tuning, e.g.
+   explain: () => `Form window: last ${WINDOW} matches.`  Text only: it is set
+   with textContent, so markup in it is shown, not interpreted. Ratings without
+   an `explain` fall back to their blurb. */
+function explainParagraphs(def) {
+  let out = def.explain;
+  if (typeof out === "function") {
+    try { out = out(); }
+    catch (e) { console.warn(`rating "${def.id}": explain() failed`, e); out = null; }
+  }
+  if (!out) out = def.blurb;
+  if (!out) return [];
+  return (Array.isArray(out) ? out : [out]).filter(p => typeof p === "string" && p.trim());
+}
+
+function renderRatingDocs() {
+  const body = $("ratingDocsBody");
+  body.replaceChildren();
+
+  if (!RATINGS.length) {
+    body.append(el("p", "rdnote", "No ratings are registered."));
+    return;
+  }
+
+  for (const def of RATINGS) {
+    const box = el("div", "rdoc" + (def.id === ratingId ? " on" : ""));
+    const head = el("div", "rdhead");
+    head.append(el("span", "rdname", def.name || def.id));
+    if (def.abbr) head.append(el("span", "rdabbr", def.abbr));
+    if (def.id === ratingId) head.append(el("span", "rdon", "showing"));
+    box.append(head);
+
+    const paras = explainParagraphs(def);
+    paras.forEach((p, i) => box.append(el("p", i ? null : "lede", p)));
+    if (!paras.length) box.append(el("p", null, "No description provided."));
+    body.append(box);
+  }
+
+  const note = el("div", "rdnote");
+  note.append(document.createTextNode("Higher always means a harder run-in. Ratings are plugins — register your own with "));
+  note.append(el("code", null, "NWSLRating.register({ id, name, compute, explain })"));
+  note.append(document.createTextNode(" and it appears here. See the README."));
+  body.append(note);
+}
+
+/* ---------------- rendering: standings ---------------- */
+function renderStandings(table, rating, ratings) {
+  const th = $("rsrTh");
+  th.hidden = !rating;
+  document.querySelector(".cols").classList.toggle("rated", !!rating);
+  if (rating) {
+    th.textContent = rating.abbr || rating.name;
+    th.title = rating.abbr ? `${rating.name} — ${rating.blurb || ""}`.trim() : (rating.blurb || rating.name);
+  }
+
+  const tb = $("standBody");
+  tb.replaceChildren();
+  for (const r of table) {
+    const t = data.teams[r.id];
+    const tr = el("tr");
+    tr.tabIndex = 0;
+    tr.setAttribute("role", "button");
+    tr.setAttribute("aria-pressed", String(r.id === selected));
+    tr.title = `Show ${t.name}'s matchups`;
+
+    const rk = el("td", "rk", String(r.rank));
+    const tm = el("td", "tm");
+    const box = el("div", "teamcell");
+    box.append(crest(t), el("span", "tname", t.short));
+    tm.append(box);
+
+    const cells = [rk, tm];
+    for (const v of [r.gp, r.w, r.dr, r.l, r.gf, r.ga, r.gd > 0 ? "+" + r.gd : String(r.gd)])
+      cells.push(el("td", null, String(v)));
+    cells.push(el("td", "pts", String(r.pts)));
+
+    if (rating) {
+      const rr = ratings.get(r.id);
+      const cell = el("td", "rsr", fmtRating(rating, rr));
+      if (rr && rr.rank) cell.title = `${ord(rr.rank)}-hardest of ${rr.of}`;
+      cells.push(cell);
+    }
+
+    if (r.rank === PLAYOFF_SPOTS + 1) cells.forEach(c => c.classList.add("plineoff"));
+    tr.append(...cells);
+
+    const go = () => selectTeam(r.id);
+    tr.addEventListener("click", go);
+    tr.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+    });
+    tb.append(tr);
+  }
+}
+
+/* ---------------- rendering: team panel ---------------- */
+function renderTeam(table, rating, ratings) {
+  const panel = $("teamPanel");
+  panel.replaceChildren();
+  const row = table.find(r => r.id === selected);
+  const t = data.teams[selected];
+  if (!row || !t) return;
+
+  /* header */
+  const head = el("div", "teamhead");
+  head.append(crest(t, 44));
+  const names = el("div");
+  names.append(el("div", "nm", t.name));
+  head.append(names);
+  panel.append(head);
+
+  /* stat tiles */
+  const tiles = el("div", "tiles");
+  const tile = (k, v, sub, below) => {
+    const n = el("div", "tile");
+    n.append(el("div", "k", k));
+    const val = el("div", "v", v);
+    if (sub && !below) val.append(el("small", null, sub));
+    n.append(val);
+    if (sub && below) n.append(el("div", "sub2", sub));
+    return n;
+  };
+  tiles.append(
+    tile("Home", `${row.hw}-${row.hd}-${row.hl}`, "W-D-L"),
+    tile("Away", `${row.aw}-${row.ad}-${row.al}`, "W-D-L")
+  );
+  const f = el("div", "tile");
+  f.append(el("div", "k", "Last 5"));
+  const fr = el("div", "form");
+  if (!row.form.length) fr.append(el("span", "upc", "—"));
+  for (const r of row.form) {
+    const c = el("span", "fchip", r);
+    c.style.background = r === "W" ? "var(--good)" : r === "L" ? "var(--loss)" : "var(--draw)";
+    c.title = { W:"Win", D:"Draw", L:"Loss" }[r];
+    fr.append(c);
+  }
+  f.append(fr);
+  tiles.append(f);
+
+  panel.append(tiles);
+
+  /* view tabs */
+  const tabs = el("div", "tabs");
+  tabs.setAttribute("role", "tablist");
+  for (const [key, label] of [["opponents", "By opponent"], ["schedule", "Schedule"]]) {
+    const b = el("button", "tab", label);
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(view === key));
+    b.addEventListener("click", () => { view = key; render(); });
+    tabs.append(b);
+  }
+  panel.append(tabs);
+
+  panel.append(view === "opponents" ? opponentMatrix(table, rating, ratings) : scheduleList());
+
+  const foot = el("div", "foot");
+  foot.append(document.createTextNode(
+    "H = home, A = away. Scores are shown from each column team's perspective. " +
+    (view === "opponents"
+      ? "Click any opponent to add its own results beside " + t.short + "'s; click again to remove it."
+      : "Click any opponent to switch teams.")));
+  panel.append(foot);
+}
+
+/* One team's season keyed by opponent: { oppId -> { home, away } }. */
+function legsByOpponent(teamId) {
+  const byOpp = new Map();
+  for (const m of data.matches) {
+    if (m.home !== teamId && m.away !== teamId) continue;
+    const p = perspective(m, teamId);
+    if (!byOpp.has(p.oppId)) byOpp.set(p.oppId, { home: null, away: null });
+    byOpp.get(p.oppId)[p.isHome ? "home" : "away"] = p;
+  }
+  return byOpp;
+}
+
+/* The score, date or live marker for a single leg. */
+function legCell(leg) {
+  const box = el("span", "cell");
+  if (!leg) box.append(el("span", "upc", "—"));
+  else if (leg.m.state === "L") box.append(el("span", "live", leg.score || "live"));
+  else if (leg.played) box.append(resultChip(leg.res, leg.score));
+  else {
+    const u = el("span", "upc", fmtDay(leg.m.date));
+    u.title = `${fmtDay(leg.m.date)}, ${fmtTime(leg.m.date)}` + (leg.m.venue ? ` · ${leg.m.venue}` : "");
+    box.append(u);
+  }
+  return box;
+}
+
+/* The active rating, shown under a team's name in the matrix header. */
+function ratingLine(def, rr, teamId) {
+  const line = el("span", "grprate");
+  line.append(el("span", "rlabbr", def.abbr || def.name));
+  line.append(el("span", "rlval", fmtRating(def, rr)));
+  if (rr && rr.rank) line.append(el("span", "rlrank", `${ord(rr.rank)} of ${rr.of}`));
+  const left = remainingFor(data, teamId).length;
+  line.title = `${def.name}${def.blurb ? " — " + def.blurb : ""}\n${left} matches left`;
+  return line;
+}
+
+/* Every opponent, once, with the home leg and the away leg side by side —
+   and one such pair of columns per compared team. */
+function opponentMatrix(table, rating, ratings) {
+  const shown = [selected, ...compare].filter(id => data.teams[id]);
+  const legs = new Map(shown.map(id => [id, legsByOpponent(id)]));
+  const opponents = new Set();
+  for (const byOpp of legs.values()) for (const id of byOpp.keys()) opponents.add(id);
+  const order = table.filter(r => opponents.has(r.id));
+
+  const tbl = el("table", "mx" + (shown.length > 1 ? " cmp" : ""));
+  const thead = el("thead");
+
+  const oppTh = el("th", "opp");
+  oppTh.append(el("span", "hahdr", "Opponent"), el("span", "hint", "— click to compare"));
+
+  const gtr = el("tr", "grp");
+  oppTh.rowSpan = 2;
+  gtr.append(oppTh);
+  for (const id of shown) {
+    const t = data.teams[id];
+    const th = el("th", "grph" + (id === selected ? "" : " gsep"));
+    th.colSpan = 2;
+    const wrap = el("span", "grpname");
+    wrap.append(crest(t, 18), el("span", null, t.short));
+    if (id !== selected) {
+      const x = el("button", "unpin", "✕");
+      x.title = `Stop comparing ${t.name}`;
+      x.setAttribute("aria-label", x.title);
+      x.addEventListener("click", () => toggleCompare(id));
+      wrap.append(x);
+    }
+    th.append(wrap);
+    if (rating) th.append(ratingLine(rating, ratings.get(id), id));
+    gtr.append(th);
+  }
+  thead.append(gtr);
+
+  const htr = el("tr");
+  for (const id of shown) {
+    for (const [isHome, label] of [[true, "Home"], [false, "Away"]]) {
+      const th = el("th", isHome && id !== selected ? "gsep" : null);
+      th.append(haBadge(isHome), el("span", "hahdr", label));
+      htr.append(th);
+    }
+  }
+  thead.append(htr);
+  tbl.append(thead);
+
+  const tb = el("tbody");
+  for (const r of order) {
+    const opp = data.teams[r.id];
+    const on = compare.includes(r.id);
+    const tr = el("tr");
+
+    const td = el("td", "opp");
+    const btn = el("button", "oppbtn" + (on ? " on" : ""));
+    btn.append(crest(opp), el("span", "tname", opp.short));
+    if (r.id === selected) {
+      btn.disabled = true;
+      btn.title = `${opp.name} — the team you're looking at`;
+    } else {
+      btn.title = on ? `Stop comparing ${opp.name}` : `Compare ${opp.name}`;
+      btn.setAttribute("aria-pressed", String(on));
+      btn.addEventListener("click", () => toggleCompare(r.id));
+    }
+    td.append(btn);
+    tr.append(td);
+
+    for (const id of shown) {
+      const pair = legs.get(id).get(r.id);
+      for (const which of ["home", "away"]) {
+        const cell = el("td", which === "home" && id !== selected ? "gsep" : null);
+        if (id === r.id) cell.append(el("span", "cell self", "·"));
+        else cell.append(legCell(pair && pair[which]));
+        tr.append(cell);
+      }
+    }
+    tb.append(tr);
+  }
+  tbl.append(tb);
+  if (shown.length === 1) return tbl;
+  // Enough teams and the columns stop fitting; let them scroll rather than crush.
+  const scroll = el("div", "mxscroll");
+  tbl.style.minWidth = 152 + shown.length * 168 + "px";
+  scroll.append(tbl);
+  return scroll;
+}
+
+function scheduleList() {
+  const mine = data.matches
+    .filter(m => m.home === selected || m.away === selected)
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const tbl = el("table", "sched");
+  const tb = el("tbody");
+  let month = "";
+  for (const m of mine) {
+    const p = perspective(m, selected);
+    const mo = fmtMonth(m.date);
+    if (mo !== month) {
+      month = mo;
+      const sep = el("tr", "mdsep");
+      const td = el("td", null, mo);
+      td.colSpan = 4;
+      sep.append(td);
+      tb.append(sep);
+    }
+    const opp = data.teams[p.oppId];
+    const tr = el("tr");
+    tr.append(el("td", "dt", fmtDay(m.date)));
+
+    const ha = el("td", "hacell");
+    ha.append(haBadge(p.isHome));
+    tr.append(ha);
+
+    const o = el("td", "opp");
+    const btn = el("button", "oppbtn");
+    btn.append(el("span", "vs", p.isHome ? "vs" : "at"), crest(opp), el("span", "tname", opp ? opp.short : "?"));
+    btn.title = opp ? `Show ${opp.name}'s matchups` : "";
+    btn.addEventListener("click", () => selectTeam(p.oppId));
+    o.append(btn);
+    tr.append(o);
+
+    const rc = el("td", "rescell");
+    if (m.state === "L") rc.append(el("span", "live", p.score || "Live"));
+    else if (p.played) rc.append(resultChip(p.res, p.score));
+    else {
+      const u = el("span", "upc", fmtTime(m.date));
+      if (m.venue) u.title = m.venue;
+      rc.append(u);
+    }
+    tr.append(rc);
+    tb.append(tr);
+  }
+  tbl.append(tb);
+  return tbl;
+}
+
+/* ---------------- status line ---------------- */
+function setStatus(kind, text, busy) {
+  const s = $("status");
+  s.replaceChildren();
+  s.append(busy ? el("span", "spin") : el("span", "dot" + (kind === "snapshot" ? " stale" : kind === "error" ? " err" : "")));
+  s.append(document.createTextNode(text));
+}
+
+/* ---------------- data loading ---------------- */
+function readCache(y) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY(y));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    return d && d.matches && d.matches.length ? d : null;
+  } catch { return null; }
+}
+function writeCache(d) {
+  try { localStorage.setItem(CACHE_KEY(d.season), JSON.stringify(d)); } catch {}
+}
+function readSnapshot() {
+  try {
+    const d = JSON.parse($("snapshot").textContent);
+    return d && d.matches && d.matches.length ? d : null;
+  } catch { return null; }
+}
+
+async function fetchSeason(y) {
+  const res = await fetch(API(y), { cache: "no-store" });
+  if (!res.ok) throw new Error(`ESPN returned ${res.status}`);
+  const parsed = parseESPN(await res.json(), y);
+  if (!parsed.matches.length) throw new Error("no matches returned");
+  return parsed;
+}
+
+/* Show something immediately (cache → embedded snapshot), then refresh over the network. */
+async function load(y, { force = false } = {}) {
+  season = y;
+  $("seasonLbl").textContent = String(y);
+  $("season").value = String(y);
+
+  const cached = readCache(y);
+  const snap = readSnapshot();
+  const local = cached || (snap && snap.season === y ? snap : null);
+
+  if (local) {
+    data = local;
+    ensureSelection();
+    render();
+    setStatus("ok", `Showing saved data from ${relTime(local.updated)} · checking for updates…`, true);
+  } else {
+    data = null;
+    $("standBody").replaceChildren();
+    $("teamPanel").replaceChildren(el("div", "err", "Loading…"));
+    setStatus("ok", "Loading season…", true);
+  }
+
+  const fresh = local && !force && (Date.now() - new Date(local.updated) < CACHE_TTL);
+  if (fresh) {
+    setStatus("ok", `Up to date · fetched ${relTime(local.updated)}`);
+    return;
+  }
+
+  try {
+    const d = await fetchSeason(y);
+    if (season !== y) return;                    // user switched seasons mid-flight
+    data = d;
+    writeCache(d);
+    ensureSelection();
+    render();
+    const played = d.matches.filter(m => m.state === "F").length;
+    setStatus("ok", `Live from ESPN · ${played} of ${d.matches.length} matches played · updated just now`);
+  } catch (err) {
+    if (season !== y) return;
+    if (data) {
+      setStatus("snapshot", `Couldn't reach ESPN (${err.message}) — showing saved data from ${relTime(data.updated)}`);
+    } else {
+      setStatus("error", `Couldn't load ${y}: ${err.message}`);
+      $("teamPanel").replaceChildren(el("div", "err",
+        "No data available offline for this season. Reconnect and press Refresh."));
+    }
+  }
+}
+
+function ensureSelection() {
+  if (!data) return;
+  const ids = Object.keys(data.teams);
+  if (!ids.length) return;
+  const lookup = token => {
+    const want = decodeURIComponent(token).trim().toLowerCase();
+    return ids.find(id =>
+      id === want ||
+      data.teams[id].abbr.toLowerCase() === want ||
+      data.teams[id].name.toLowerCase() === want) || null;
+  };
+
+  const fromHash = (location.hash.match(/team=([^&]+)/) || [])[1];
+  const hit = fromHash && lookup(fromHash);
+  if (hit) selected = hit;
+  else if (!selected || !data.teams[selected]) selected = computeTable(data)[0].id;
+
+  const vs = (location.hash.match(/vs=([^&]+)/) || [])[1];
+  if (vs) {
+    const seen = new Set();
+    compare = vs.split(",").map(lookup)
+      .filter(id => id && id !== selected && !seen.has(id) && seen.add(id));
+  } else {
+    compare = compare.filter(id => data.teams[id] && id !== selected);
+  }
+}
+
+function writeHash() {
+  let h = `#season=${season}`;
+  if (selected) {
+    const t = data && data.teams[selected];
+    h += `&team=${encodeURIComponent(t ? t.abbr : selected)}`;
+  }
+  if (compare.length) {
+    const abbr = id => encodeURIComponent(data && data.teams[id] ? data.teams[id].abbr : id);
+    h += `&vs=${compare.map(abbr).join(",")}`;
+  }
+  if (ratingId) h += `&rating=${encodeURIComponent(ratingId)}`;
+  history.replaceState(null, "", h);
+}
+
+function activeRating() {
+  return RATINGS.find(r => r.id === ratingId) || null;
+}
+
+function selectTeam(id) {
+  selected = id;
+  compare = compare.filter(x => x !== id);   // a compared team promoted to the main one
+  writeHash();
+  render();
+  if (window.matchMedia("(max-width:900px)").matches)
+    $("teamPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* Add or remove a team from the side-by-side columns. */
+function toggleCompare(id) {
+  if (id === selected || !data.teams[id]) return;
+  compare = compare.includes(id) ? compare.filter(x => x !== id) : [...compare, id];
+  writeHash();
+  render();
+}
+
+function render() {
+  if (!data) return;
+  const table = computeTable(data);
+  const rating = activeRating();
+  const ratings = computeRatings(data, table, rating);
+  renderStandings(table, rating, ratings);
+  renderTeam(table, rating, ratings);
+}
+
+/* ---------------- boot ---------------- */
+const RATING_KEY = "nwsl-matchup:rating";
+
+function fillRatingPicker() {
+  const sel = $("rating");
+  sel.replaceChildren(new Option("No rating", ""));
+  for (const r of RATINGS) sel.append(new Option(r.name || r.id, r.id));
+  sel.value = ratingId || "";
+  if (sel.value !== (ratingId || "")) { ratingId = null; sel.value = ""; }   // id no longer registered
+  const cur = activeRating();
+  sel.title = cur ? (cur.blurb || cur.name) : "Rate each team's remaining schedule";
+  renderRatingDocs();   // every path that changes ratingId comes through here
+}
+
+/* A rating registered after boot (a dropped-in ratings/*.js, or one pasted into
+   the console) shows up straight away. */
+function ratingsChanged() {
+  if (!booted) return;
+  fillRatingPicker();
+  render();
+}
+
+function initRatings() {
+  const fromHash = (location.hash.match(/rating=([^&]+)/) || [])[1];
+  const want = fromHash ? decodeURIComponent(fromHash) : localStorage.getItem(RATING_KEY);
+  ratingId = RATINGS.some(r => r.id === want) ? want : null;
+  fillRatingPicker();
+
+  $("rating").addEventListener("change", e => {
+    ratingId = e.target.value || null;
+    if (ratingId) localStorage.setItem(RATING_KEY, ratingId);
+    else localStorage.removeItem(RATING_KEY);
+    fillRatingPicker();
+    writeHash();
+    render();
+  });
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("nwsl-matchup:theme");
+  if (saved) document.documentElement.dataset.theme = saved;
+  $("theme").addEventListener("click", () => {
+    const cur = document.documentElement.dataset.theme ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("nwsl-matchup:theme", next);
+  });
+}
+
+function init() {
+  initTheme();
+  initRatings();
+  const sel = $("season");
+  for (const y of SEASONS) sel.append(new Option(String(y), String(y)));
+
+  const hashSeason = Number((location.hash.match(/season=(\d{4})/) || [])[1]);
+  const snap = readSnapshot();
+  const start = SEASONS.includes(hashSeason) ? hashSeason : (snap && snap.season) || SEASONS[0];
+
+  sel.addEventListener("change", () => {
+    selected = null;
+    season = Number(sel.value);
+    writeHash();
+    load(season);
+  });
+  $("refresh").addEventListener("click", () => load(season, { force: true }));
+  addEventListener("hashchange", () => {
+    const want = (location.hash.match(/rating=([^&]+)/) || [])[1];
+    const id = want ? decodeURIComponent(want) : null;
+    if (RATINGS.some(r => r.id === id) || id === null) { ratingId = id; fillRatingPicker(); }
+    const y = Number((location.hash.match(/season=(\d{4})/) || [])[1]);
+    if (y && y !== season) load(y); else { ensureSelection(); render(); }
+  });
+
+  booted = true;
+  load(start);
+}
+
+/* Extension point: third-party formulas register through this. */
+window.NWSLRating = {
+  register: registerRating,
+  list: () => RATINGS.map(r => r.id),
+  helpers: { remainingFor, pointsPerGame, venuePointsPerGame, perspective, computeTable }
+};
+
+document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>

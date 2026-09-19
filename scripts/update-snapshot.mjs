@@ -21,7 +21,7 @@ const LEAGUE = "usa.nwsl";
 const season = Number(process.argv[2]) || new Date().getUTCFullYear();
 const url =
   `https://site.api.espn.com/apis/site/v2/sports/soccer/${LEAGUE}/scoreboard` +
-  `?limit=1000&dates=${season}0101-${season}1231`;
+  `?limit=1000&dates=${season}`;
 
 // Keep in sync with parseESPN() in index.html.
 function parseESPN(json, year) {

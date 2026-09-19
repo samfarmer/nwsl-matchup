@@ -308,7 +308,7 @@
 
 const LEAGUE = "usa.nwsl";
 const API = s =>
-  `https://site.api.espn.com/apis/site/v2/sports/soccer/${LEAGUE}/scoreboard?limit=1000&dates=${s}0101-${s}1231`;
+  `https://site.api.espn.com/apis/site/v2/sports/soccer/${LEAGUE}/scoreboard?limit=1000&dates=${s}`;
 const CACHE_KEY = s => `nwsl-matchup:${s}`;
 const CACHE_TTL = 10 * 60 * 1000;          // re-fetch in the background after 10 min
 const PLAYOFF_SPOTS = 8;
